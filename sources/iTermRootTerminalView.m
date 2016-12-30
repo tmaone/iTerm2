@@ -26,6 +26,7 @@ static const CGFloat kMaximumToolbeltSizeAsFractionOfWindow = 0.5;
 @interface iTermRootTerminalView()<iTermTabBarControlViewDelegate, iTermDragHandleViewDelegate>
 
 @property(nonatomic, retain) PTYTabView *tabView;
+@property(nonatomic, retain) NSVisualEffectView *visualEffectView;
 @property(nonatomic, retain) iTermTabBarControlView *tabBarControl;
 @property(nonatomic, retain) SolidColorView *divisionView;
 @property(nonatomic, retain) iTermToolbeltView *toolbelt;
@@ -45,6 +46,14 @@ static const CGFloat kMaximumToolbeltSizeAsFractionOfWindow = 0.5;
     self = [super initWithFrame:frameRect color:color];
     if (self) {
         _delegate = delegate;
+
+        self.visualEffectView = [[NSVisualEffectView alloc] initWithFrame:frameRect];
+        _visualEffectView.material = NSVisualEffectMaterialAppearanceBased;
+        _visualEffectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+        _visualEffectView.state = NSVisualEffectStateActive;
+        _visualEffectView.autoresizingMask = (NSViewWidthSizable | NSViewHeightSizable);
+
+        [self addSubview:_visualEffectView];
 
         self.autoresizesSubviews = YES;
         _leftTabBarWidth = [iTermPreferences doubleForKey:kPreferenceKeyLeftTabBarWidth];
@@ -102,6 +111,7 @@ static const CGFloat kMaximumToolbeltSizeAsFractionOfWindow = 0.5;
 }
 
 - (void)dealloc {
+    [_visualEffectView release];
     [_tabView release];
 
     _tabBarControl.itermTabBarDelegate = nil;
@@ -391,7 +401,7 @@ static const CGFloat kMaximumToolbeltSizeAsFractionOfWindow = 0.5;
                 }
                 self.tabView.frame = tabViewFrame;
                 [self updateDivisionView];
-                
+
                 const CGFloat dragHandleWidth = 3;
                 NSRect leftTabBarDragHandleFrame = NSMakeRect(NSMaxX(self.tabBarControl.frame) - dragHandleWidth,
                                                               0,
@@ -424,7 +434,7 @@ static const CGFloat kMaximumToolbeltSizeAsFractionOfWindow = 0.5;
     [self.tabBarControl setStretchCellsToFit:[iTermPreferences boolForKey:kPreferenceKeyStretchTabsToFillBar]];
     [self.tabBarControl setCellOptimumWidth:[iTermAdvancedSettingsModel optimumTabWidth]];
     self.tabBarControl.smartTruncation = [iTermAdvancedSettingsModel tabTitlesUseSmartTruncation];
-    
+
     DLog(@"repositionWidgets - redraw view");
     // Note: this used to call setNeedsDisplay on each session in the current tab.
     [self setNeedsDisplay:YES];
