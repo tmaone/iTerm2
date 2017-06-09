@@ -1,5 +1,5 @@
 PATH := /usr/bin:/bin:/usr/sbin:/sbin
-
+CODESIGN_IDENTITY := "Mac Developer: marios.daoutis@gmail.com (UPV4QJU3NV)"
 ORIG_PATH := $(PATH)
 PATH := /usr/bin:/bin:/usr/sbin:/sbin
 ITERM_PID=$(shell pgrep "iTerm2")
@@ -32,8 +32,7 @@ Dep:
 	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment
 
 Deployment:
-	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment && \
-	chmod -R go+rX build/Deployment
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment CODE_SIGN_IDENTITY=$(CODESIGN_IDENTITY)	&& chmod -R go+rX build/Deployment
 
 Nightly: force
 	cp plists/nightly-iTerm2.plist plists/iTerm2.plist
