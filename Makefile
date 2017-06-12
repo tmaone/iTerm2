@@ -81,3 +81,12 @@ preview:
 	make Deployment
 
 force:
+
+custom: clean
+	cp plists/nightly-iTerm2.plist plists/iTerm2.plist
+	xcodebuild -parallelizeTargets -target iTerm2 -configuration Deployment CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+	git checkout -- plists/iTerm2.plist
+	chmod -R go+rX build/Deployment
+	codesign --sign $(CODESIGN_IDENTITY) --force --deep -vvv build/Deployment/iTerm2.app
+	make backup-old-iterm
+	cp -R build/Deployment/iTerm2.app $(APPS)
