@@ -84,7 +84,7 @@
 + (BOOL)optionIsMetaForSpecialChars;
 
 + (BOOL)startDebugLoggingAutomatically;
-+ (BOOL)aboutToPasteTabs;
++ (BOOL)aboutToPasteTabsWithCancel;
 
 + (BOOL)alwaysAcceptFirstMouse;
 
@@ -145,6 +145,7 @@
 + (BOOL)includePasteHistoryInAdvancedPaste;
 + (BOOL)experimentalKeyHandling;
 + (double)hotKeyDoubleTapMaxDelay;
++ (double)hotKeyDoubleTapMinDelay;
 + (BOOL)hideStuckTooltips;
 + (BOOL)indicateBellsInDockBadgeLabel;
 + (double)tabFlashAnimationDuration;
@@ -161,7 +162,6 @@
 + (BOOL)useColorfgbgFallback;
 + (BOOL)promptForPasteWhenNotAtPrompt;
 + (void)setPromptForPasteWhenNotAtPrompt:(BOOL)value;
-+ (BOOL)performDNSLookups;
 + (BOOL)zeroWidthSpaceAdvancesCursor;
 + (BOOL)darkThemeHasBlackTitlebar;
 + (BOOL)fontChangeAffectsBroadcastingSessions;
@@ -187,5 +187,16 @@
 + (BOOL)tmuxUsesDedicatedProfile;
 + (BOOL)detectPasswordInput;
 + (BOOL)disablePasswordManagerAnimations;
++ (BOOL)focusNewSplitPaneWithFocusFollowsMouse;
++ (NSString *)viewManPageCommand;
++ (BOOL)preventEscapeSequenceFromClearingHistory;
++ (BOOL)dwcLineCache;
++ (BOOL)lowFiCombiningMarks;
++ (CGFloat)verticalBarCursorWidth;
++ (BOOL)statusBarIcon;
++ (BOOL)sensitiveScrollWheel;
++ (BOOL)disableCustomBoxDrawing;
++ (BOOL)useExperimentalFontMetrics;
++ (BOOL)supportREPCode;
 
 @end

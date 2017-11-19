@@ -9,6 +9,7 @@
 #import "PTYTask.h"
 #import "TaskNotifier.h"
 #import "iTermAdvancedSettingsModel.h"
+#import "iTermLSOF.h"
 #import "iTermOrphanServerAdopter.h"
 #import <OpenDirectory/OpenDirectory.h>
 
@@ -275,10 +276,9 @@ static void HandleSigChld(int n) {
 // Like login_tty but makes fd 0 the master, fd 1 the slave, fd 2 an open unix-domain socket
 // for transferring file descriptors, and fd 3 the write end of a pipe that closes when the server
 // dies.
+// IMPORTANT: This runs between fork and exec. Careful what you do.
 static void MyLoginTTY(int master, int slave, int serverSocketFd, int deadMansPipeWriteEnd) {
-    iTermFileDescriptorServerLog("Calling setsid");
     setsid();
-    iTermFileDescriptorServerLog("Calling ioctl");
     ioctl(slave, TIOCSCTTY, NULL);
 
     // This array keeps track of which file descriptors are in use and should not be dup2()ed over.
@@ -312,7 +312,6 @@ static void MyLoginTTY(int master, int slave, int serverSocketFd, int deadMansPi
             }
             if (!isInUse) {
                 // t is good. dup orig[o] to t and close orig[o]. Save t in temp[o].
-                iTermFileDescriptorServerLog("dup2 to candidate and close");
                 inuse[inuseCount++] = candidate;
                 temp[o] = candidate;
                 dup2(original, candidate);
@@ -325,7 +324,6 @@ static void MyLoginTTY(int master, int slave, int serverSocketFd, int deadMansPi
     // Dup the temp values to their desired values (which happens to equal the index in temp).
     // Close the temp file descriptors.
     for (int i = 0; i < sizeof(orig) / sizeof(*orig); i++) {
-        iTermFileDescriptorServerLog("dup2 to low number and close");
         dup2(temp[i], i);
         close(temp[i]);
     }
@@ -358,7 +356,6 @@ static int MyForkPty(int *amaster,
 
         case 0:
             // child
-            iTermFileDescriptorServerLog("Calling MyLoginTTY in child process");
             MyLoginTTY(master, slave, serverSocketFd, deadMansPipeWriteEnd);
             return 0;
 
@@ -1060,11 +1057,11 @@ static int MyForkPty(int *amaster,
     pid_t oldestPid = -1;
     for (int i = 0; i < numPids; ++i) {
         struct proc_taskallinfo taskAllInfo;
-        int rc = proc_pidinfo(pids[i],
-                              PROC_PIDTASKALLINFO,
-                              0,
-                              &taskAllInfo,
-                              sizeof(taskAllInfo));
+        int rc = iTermProcPidInfoWrapper(pids[i],
+                                         PROC_PIDTASKALLINFO,
+                                         0,
+                                         &taskAllInfo,
+                                         sizeof(taskAllInfo));
         if (rc <= 0) {
             continue;
         }
@@ -1104,13 +1101,13 @@ static int MyForkPty(int *amaster,
     // This only works if the child process is owned by our uid
     // Notably it seems to work (at least on 10.10) even if the process ID is
     // not owned by us.
-    ret = proc_pidinfo(self.pid, PROC_PIDVNODEPATHINFO, 0, &vpi, sizeof(vpi));
+    ret = iTermProcPidInfoWrapper(self.pid, PROC_PIDVNODEPATHINFO, 0, &vpi, sizeof(vpi));
     if (ret <= 0) {
         // The child was probably owned by root (which is expected if it's
         // a login shell. Use the cwd of its oldest child instead.
         pid_t childPid = [self getFirstChildOfPid:self.pid];
         if (childPid > 0) {
-            ret = proc_pidinfo(childPid, PROC_PIDVNODEPATHINFO, 0, &vpi, sizeof(vpi));
+            ret = iTermProcPidInfoWrapper(childPid, PROC_PIDVNODEPATHINFO, 0, &vpi, sizeof(vpi));
         }
     }
     if (ret <= 0) {

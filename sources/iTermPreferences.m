@@ -142,6 +142,9 @@ static NSString *sPreviousVersion;
     [userDefaults setInteger:1 forKey:@"AppleAntiAliasingThreshold"];
     [userDefaults setInteger:1 forKey:@"AppleSmoothFixedFontsSizeThreshold"];
     
+    // Turn off high sierra's native tabs
+    [userDefaults setObject:@"manual" forKey:@"AppleWindowTabbingMode"];
+
     // Turn off scroll animations because they screw up the terminal scrolling.
     [userDefaults setInteger:0 forKey:@"AppleScrollAnimationEnabled"];
 
@@ -355,7 +358,7 @@ static NSString *sPreviousVersion;
 }
 
 + (id)computedObjectForKey:(NSString *)key {
-    id (^block)() = [self computedObjectDictionary][key];
+    id (^block)(void) = [self computedObjectDictionary][key];
     if (block) {
         return block();
     } else {

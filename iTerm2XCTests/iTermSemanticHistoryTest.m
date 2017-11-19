@@ -57,7 +57,8 @@
     return NO;
 }
 
-- (BOOL)fileExistsAtPathLocally:(NSString *)filename additionalNetworkPaths:(NSArray *)additionalNetworkPaths {
+- (BOOL)fileExistsAtPathLocally:(NSString *)filename
+         additionalNetworkPaths:(NSArray<NSString *> *)additionalNetworkPaths {
     NSMutableArray *networkPaths = [[_networkMountPoints mutableCopy] autorelease];
     [networkPaths addObjectsFromArray:additionalNetworkPaths];
     for (NSString *networkPath in networkPaths) {
@@ -316,6 +317,7 @@
     static NSString *const kWorkingDirectory = @"/working/directory";
     NSString *kAbsoluteFilename = @"/working/directory/path/to/file";
     [_semanticHistoryController.fakeFileManager.files addObject:kAbsoluteFilename];
+    [_semanticHistoryController.fakeFileManager.files addObject:@"/working/directory/./path/to/file"];
     NSString *actual = [_semanticHistoryController getFullPath:kRelativeFilename
                                               workingDirectory:kWorkingDirectory
                                                     lineNumber:&lineNumber
@@ -332,6 +334,7 @@
     static NSString *const kWorkingDirectory = @"/working/directory/blah";
     NSString *kAbsoluteFilename = @"/working/directory/path/to/file";
     [_semanticHistoryController.fakeFileManager.files addObject:kAbsoluteFilename];
+    [_semanticHistoryController.fakeFileManager.files addObject:@"/working/directory/blah/../path/to/file"];
     NSString *actual = [_semanticHistoryController getFullPath:kRelativeFilename
                                               workingDirectory:kWorkingDirectory
                                                     lineNumber:&lineNumber

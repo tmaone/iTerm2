@@ -9,102 +9,43 @@
 #import "PTYFontInfo.h"
 
 #import "DebugLogging.h"
+#import "FontSizeEstimator.h"
+#import "iTermAdvancedSettingsModel.h"
 
 @implementation NSFont(PTYFontInfo)
 
-- (NSInteger)it_ligatureLevel {
-    // Returns the proper ligature level for this font. Defaults to 1.
-    static NSDictionary *fontNameToLigatureLevel;
+- (BOOL)it_fontIsOnLigatureBlacklist {
+    static NSSet<NSString *> *blacklist;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        fontNameToLigatureLevel = @{ @"Iosevka": @2,
-                                     @"Iosevka-Bold": @2,
-                                     @"Iosevka-Bold-Italic": @2,
-                                     @"Iosevka-Bold-Oblique": @2,
-                                     @"Iosevka-Extralight": @2,
-                                     @"Iosevka-Extralight-Italic": @2,
-                                     @"Iosevka-Extralight-Oblique": @2,
-                                     @"Iosevka-Heavy": @2,
-                                     @"Iosevka-Heavy-Italic": @2,
-                                     @"Iosevka-Heavy-Oblique": @2,
-                                     @"Iosevka-Italic": @2,
-                                     @"Iosevka-Light": @2,
-                                     @"Iosevka-Light-Italic": @2,
-                                     @"Iosevka-Light-Oblique": @2,
-                                     @"Iosevka-Medium": @2,
-                                     @"Iosevka-Medium-Italic": @2,
-                                     @"Iosevka-Medium-Oblique": @2,
-                                     @"Iosevka-Oblique": @2,
-                                     @"Iosevka-Thin": @2,
-                                     @"Iosevka-Thin-Italic": @2,
-                                     @"Iosevka-Thin-Oblique": @2,
-                                     @"Iosevka-Slab": @2,
-                                     @"Iosevka-Slab-Bold": @2,
-                                     @"Iosevka-Slab-Bold-Italic": @2,
-                                     @"Iosevka-Slab-Bold-Oblique": @2,
-                                     @"Iosevka-Slab-Extralight": @2,
-                                     @"Iosevka-Slab-Extralight-Italic": @2,
-                                     @"Iosevka-Slab-Extralight-Oblique": @2,
-                                     @"Iosevka-Slab-Heavy": @2,
-                                     @"Iosevka-Slab-Heavy-Italic": @2,
-                                     @"Iosevka-Slab-Heavy-Oblique": @2,
-                                     @"Iosevka-Slab-Italic": @2,
-                                     @"Iosevka-Slab-Light": @2,
-                                     @"Iosevka-Slab-Light-Italic": @2,
-                                     @"Iosevka-Slab-Light-Oblique": @2,
-                                     @"Iosevka-Slab-Medium": @2,
-                                     @"Iosevka-Slab-Medium-Italic": @2,
-                                     @"Iosevka-Slab-Medium-Oblique": @2,
-                                     @"Iosevka-Slab-Oblique": @2,
-                                     @"Iosevka-Slab-Thin": @2,
-                                     @"Iosevka-Slab-Thin-Italic": @2,
-                                     @"Iosevka-Slab-Thin-Oblique": @2,
-                                     @"IosevkaCC": @2,
-                                     @"IosevkaCC-Bold": @2,
-                                     @"IosevkaCC-Bold-Italic": @2,
-                                     @"IosevkaCC-Bold-Oblique": @2,
-                                     @"IosevkaCC-Extralight": @2,
-                                     @"IosevkaCC-Extralight-Italic": @2,
-                                     @"IosevkaCC-Extralight-Oblique": @2,
-                                     @"IosevkaCC-Heavy": @2,
-                                     @"IosevkaCC-Heavy-Italic": @2,
-                                     @"IosevkaCC-Heavy-Oblique": @2,
-                                     @"IosevkaCC-Italic": @2,
-                                     @"IosevkaCC-Light": @2,
-                                     @"IosevkaCC-Light-Italic": @2,
-                                     @"IosevkaCC-Light-Oblique": @2,
-                                     @"IosevkaCC-Medium": @2,
-                                     @"IosevkaCC-Medium-Italic": @2,
-                                     @"IosevkaCC-Medium-Oblique": @2,
-                                     @"IosevkaCC-Oblique": @2,
-                                     @"IosevkaCC-Thin": @2,
-                                     @"IosevkaCC-Thin-Italic": @2,
-                                     @"IosevkaCC-Thin-Oblique": @2,
-                                     @"IosevkaCC-Slab": @2,
-                                     @"IosevkaCC-Slab-Bold": @2,
-                                     @"IosevkaCC-Slab-Bold-Italic": @2,
-                                     @"IosevkaCC-Slab-Bold-Oblique": @2,
-                                     @"IosevkaCC-Slab-Extralight": @2,
-                                     @"IosevkaCC-Slab-Extralight-Italic": @2,
-                                     @"IosevkaCC-Slab-Extralight-Oblique": @2,
-                                     @"IosevkaCC-Slab-Heavy": @2,
-                                     @"IosevkaCC-Slab-Heavy-Italic": @2,
-                                     @"IosevkaCC-Slab-Heavy-Oblique": @2,
-                                     @"IosevkaCC-Slab-Italic": @2,
-                                     @"IosevkaCC-Slab-Light": @2,
-                                     @"IosevkaCC-Slab-Light-Italic": @2,
-                                     @"IosevkaCC-Slab-Light-Oblique": @2,
-                                     @"IosevkaCC-Slab-Medium": @2,
-                                     @"IosevkaCC-Slab-Medium-Italic": @2,
-                                     @"IosevkaCC-Slab-Medium-Oblique": @2,
-                                     @"IosevkaCC-Slab-Oblique": @2,
-                                     @"IosevkaCC-Slab-Thin": @2,
-                                     @"IosevkaCC-Slab-Thin-Italic": @2,
-                                     @"IosevkaCC-Slab-Thin-Oblique": @2, };
-        [fontNameToLigatureLevel retain];
+        blacklist = [[NSSet setWithArray:@[ @"AndaleMono",
+                                            @"Courier",
+                                            @"LetterGothicStd",
+                                            @"Menlo",
+                                            @"Monaco",
+                                            @"OCRAStd",
+                                            @"OratorStd",
+                                            @"Osaka",
+                                            @"PTMono",
+                                            @"SFMono" ]] retain];
     });
-    NSNumber *value = fontNameToLigatureLevel[self.fontName];
-    return value ? value.integerValue : 1;
+    NSString *myName = self.fontName;
+    for (NSString *blacklistedNamePrefix in blacklist) {
+        if ([myName hasPrefix:blacklistedNamePrefix]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (NSInteger)it_ligatureLevel {
+    if ([self.fontName hasPrefix:@"Iosevka"]) {
+        return 2;
+    } else if ([self it_fontIsOnLigatureBlacklist]) {
+        return 0;
+    } else {
+        return 1;
+    }
 }
 
 - (BOOL)it_defaultLigatures {
@@ -113,16 +54,7 @@
     static NSSet *fontsWithDefaultLigatures;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        fontsWithDefaultLigatures = [[NSSet setWithArray:@[ @"FiraCode-Bold",
-                                                            @"FiraCode-Light",
-                                                            @"FiraCode-Medium",
-                                                            @"FiraCode-Regular",
-                                                            @"FiraCode-Retina",
-                                                            @"FuraCodeNerdFontCompleteMono---Bold",
-                                                            @"FuraCodeNerdFontCompleteMono---Light",
-                                                            @"FuraCodeNerdFontCompleteMono---Medium",
-                                                            @"FuraCodeNerdFontCompleteMono---Regular",
-                                                            @"FuraCodeNerdFontCompleteMono---Retina" ]] retain];
+        fontsWithDefaultLigatures = [[NSSet setWithArray:@[ ]] retain];
     });
     BOOL result = [fontsWithDefaultLigatures containsObject:self.fontName];
     DLog(@"Default ligatures for '%@' is %@", self.fontName, @(result));
@@ -176,7 +108,15 @@
 }
 
 - (CGFloat)computedBaselineOffset {
-    return -(floorf(font_.leading) - floorf(self.descender));
+    if ([iTermAdvancedSettingsModel useExperimentalFontMetrics]) {
+        NSTextContainer *textContainer = [FontSizeEstimator newTextContainer];
+        NSLayoutManager *layoutManager = [FontSizeEstimator newLayoutManagerForFont:font_ textContainer:textContainer];
+        CGFloat lineHeight = [layoutManager usedRectForTextContainer:textContainer].size.height;
+        CGFloat baselineOffsetFromTop = [layoutManager defaultBaselineOffsetForFont:font_];
+        return -floorf(lineHeight - baselineOffsetFromTop);
+    } else {
+        return -(floorf(font_.leading) - floorf(self.descender));
+    }
 }
 
 // From https://github.com/DrawKit/DrawKit/blob/master/framework/Code/NSBezierPath%2BText.m#L648

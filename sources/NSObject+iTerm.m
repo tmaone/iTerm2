@@ -20,6 +20,14 @@
     return [a isEqual:b];
 }
 
++ (instancetype)castFrom:(id)object {
+    if ([object isKindOfClass:[self class]]) {
+        return object;
+    } else {
+        return nil;
+    }
+}
+
 - (void)performSelectorWithObjects:(NSArray *)tuple {
     SEL selector = NSSelectorFromString(tuple[0]);
     NSArray *objects = tuple[1];
@@ -44,7 +52,7 @@
                         waitUntilDone:NO];
 }
 
-- (iTermDelayedPerform *)performBlock:(void (^)())block afterDelay:(NSTimeInterval)delay {
+- (iTermDelayedPerform *)performBlock:(void (^)(void))block afterDelay:(NSTimeInterval)delay {
     [self retain];
     iTermDelayedPerform *delayedPerform = [[iTermDelayedPerform alloc] init];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),

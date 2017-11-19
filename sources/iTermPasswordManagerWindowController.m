@@ -9,6 +9,7 @@
 #import "iTermPasswordManagerWindowController.h"
 
 #import "DebugLogging.h"
+#import "iTermApplication.h"
 #import "iTermSearchField.h"
 #import "iTermSystemVersion.h"
 #import <LocalAuthentication/LocalAuthentication.h>
@@ -36,6 +37,7 @@ static BOOL sAuthenticated;
     NSArray *_accounts;
     NSString *_passwordBeingShown;
     NSInteger _rowForPasswordBeingShown;
+    NSString *_accountNameToSelectAfterAuthentication;
 }
 
 + (NSArray *)accountNamesWithFilter:(NSString *)filter {
@@ -61,15 +63,21 @@ static BOOL sAuthenticated;
     return [[array sortedArrayUsingSelector:@selector(compare:)] retain];
 }
 
-+ (void)authenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext reply:(void(^)(BOOL success, NSError * __nullable error))reply {
++ (void)authenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext reply:(void(^)(BOOL success, NSError * __nullable error))reply NS_AVAILABLE_MAC(10_11) {
     DLog(@"Requesting authentication with policy %@", @(policy));
 
     NSString *myLocalizedReasonString = @"open the password manager";
     // You're supposed to hold a reference to the context until it's done doing its thing.
     [myContext retain];
+    if (policy == LAPolicyDeviceOwnerAuthentication) {
+        [[iTermApplication sharedApplication] setLocalAuthenticationDialogOpen:YES];
+    }
     [myContext evaluatePolicy:policy
               localizedReason:myLocalizedReasonString
                         reply:^(BOOL success, NSError *error) {
+                            if (policy == LAPolicyDeviceOwnerAuthentication) {
+                                [[iTermApplication sharedApplication] setLocalAuthenticationDialogOpen:NO];
+                            }
                             if (success) {
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     sAuthenticated = YES;
@@ -80,7 +88,10 @@ static BOOL sAuthenticated;
                                     sAuthenticated = NO;
                                     if (error.code != LAErrorSystemCancel &&
                                         error.code != LAErrorAppCancel) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
                                         BOOL isTouchID = (policy == LAPolicyDeviceOwnerAuthenticationWithBiometrics);
+#pragma clang diagnostic pop
                                         NSAlert *alert = [[[NSAlert alloc] init] autorelease];
                                         alert.messageText = @"Authentication Failed";
                                         alert.informativeText = [NSString stringWithFormat:@"Authentication failed because %@", [self reasonForAuthenticationError:error touchID:isTouchID]];
@@ -94,7 +105,7 @@ static BOOL sAuthenticated;
                         }];
 }
 
-+ (NSString *)reasonForAuthenticationError:(NSError *)error touchID:(BOOL)touchID {
++ (NSString *)reasonForAuthenticationError:(NSError *)error touchID:(BOOL)touchID NS_AVAILABLE_MAC(10_11) {
     switch (error.code) {
         case LAErrorAuthenticationFailed:
             return @"valid credentials weren't supplied.";
@@ -143,6 +154,7 @@ static BOOL sAuthenticated;
 
 - (void)dealloc {
     [_accounts release];
+    [_accountNameToSelectAfterAuthentication release];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [super dealloc];
 }
@@ -160,6 +172,11 @@ static BOOL sAuthenticated;
     }
 }
 
+// Opening this window should not cause the hotkey window to hide.
+- (BOOL)autoHidesHotKeyWindow {
+    return NO;
+}
+
 #pragma mark - APIs
 
 - (void)update {
@@ -175,6 +192,9 @@ static BOOL sAuthenticated;
     if (index != NSNotFound) {
         [_tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:index]
                 byExtendingSelection:NO];
+    } else if (!sAuthenticated) {
+        [_accountNameToSelectAfterAuthentication autorelease];
+        _accountNameToSelectAfterAuthentication = [name copy];
     }
 }
 
@@ -193,12 +213,7 @@ static BOOL sAuthenticated;
 }
 
 - (void)doubleClickOnTableView:(id)sender {
-    if ([_tableView clickedColumn] == 1) {
-        if (!_passwordBeingShown && [_tableView selectedRow] >= 0) {
-            [self setPasswordBeingShown:[self selectedPassword] onRow:[_tableView selectedRow]];
-            [_tableView reloadData];
-        }
-    } else if ([_tableView selectedRow] >= 0) {
+    if ([_tableView selectedRow] >= 0) {
         [self enterPassword:nil];
     }
 }
@@ -221,6 +236,7 @@ static BOOL sAuthenticated;
     if (sAuthenticated) {
         NSInteger selectedRow = [_tableView selectedRow];
         NSString *selectedAccountName = [self accountNameForRow:selectedRow];
+        [_tableView reloadData];
         [[self keychain] deletePasswordForService:kServiceName account:selectedAccountName];
         [self reloadAccounts];
         [self passwordsDidChange];
@@ -254,6 +270,19 @@ static BOOL sAuthenticated;
     }
 }
 
+- (IBAction)revealPassword:(id)sender {
+    if (!_passwordBeingShown && [_tableView selectedRow] >= 0) {
+        [self setPasswordBeingShown:[self selectedPassword] onRow:[_tableView selectedRow]];
+        [_tableView reloadData];
+    }
+}
+
+- (IBAction)copyPassword:(id)sender {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:@[ NSStringPboardType ] owner:self];
+    [pasteboard setString:[self selectedPassword] forType:NSStringPboardType];
+}
+
 #pragma mark - Private
 
 - (Class)keychain {
@@ -276,18 +305,22 @@ static BOOL sAuthenticated;
         return;
     }
 
-    LAContext *myContext = [[[LAContext alloc] init] autorelease];
-    if (![self tryToAuthenticateWithPolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics context:myContext]) {
-        if (![self tryToAuthenticateWithPolicy:LAPolicyDeviceOwnerAuthentication context:myContext]) {
-            DLog(@"There are no auth policies that can succeed on this machine. Giving up.");
+    if (@available(macOS 10.11, *)) {
+        LAContext *myContext = [[[LAContext alloc] init] autorelease];
+        NSString *reason = nil;
+        if (![self tryToAuthenticateWithPolicy:LAPolicyDeviceOwnerAuthentication context:myContext reason:&reason]) {
+            DLog(@"There are no auth policies that can succeed on this machine. Giving up. %@", reason);
             sAuthenticated = YES;
         }
     }
 }
 
-- (BOOL)policyAvailableOnThisOSVersion:(LAPolicy)policy {
+- (BOOL)policyAvailableOnThisOSVersion:(LAPolicy)policy NS_AVAILABLE_MAC(10_11) {
     switch (policy) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
         case LAPolicyDeviceOwnerAuthenticationWithBiometrics:
+#pragma clang diagnostic pop
             return IsTouchBarAvailable();
 
         case LAPolicyDeviceOwnerAuthentication:
@@ -298,11 +331,11 @@ static BOOL sAuthenticated;
     }
 }
 
-- (BOOL)tryToAuthenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext {
+- (BOOL)tryToAuthenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext reason:(NSString **)reason NS_AVAILABLE_MAC(10_11) {
     DLog(@"Try to auth with %@", @(policy));
     NSError *authError = nil;
     if (![self policyAvailableOnThisOSVersion:policy]) {
-        DLog(@"Policy not available on this OS version");
+        *reason = @"Policy not available on this OS version";
         return NO;
     }
     if ([myContext canEvaluatePolicy:policy error:&authError]) {
@@ -310,16 +343,27 @@ static BOOL sAuthenticated;
         [self authenticateWithPolicy:policy context:myContext];
         return YES;
     } else {
-        DLog(@"Can't authenticate with policy %@: %@", @(policy), authError);
+        *reason = [NSString stringWithFormat:@"Can't authenticate with policy %@: %@", @(policy), authError];
         return NO;
     }
 }
 
-- (void)authenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext {
+- (void)authenticateWithPolicy:(LAPolicy)policy context:(LAContext *)myContext NS_AVAILABLE_MAC(10_11) {
     [[self class] authenticateWithPolicy:policy context:myContext reply:^(BOOL success, NSError * _Nullable error) {
+        // When a sheet is attached to a hotkey window another app becomes active after the auth dialog
+        // is dismissed, leaving the hotkey behind another app.
+        [NSApp activateIgnoringOtherApps:YES];
+        [self.window.sheetParent makeKeyAndOrderFront:nil];
+
         if (success) {
             [self reloadAccounts];
-            [[self window] makeFirstResponder:_searchField];
+            if (_accountNameToSelectAfterAuthentication) {
+                [self selectAccountName:_accountNameToSelectAfterAuthentication];
+                [_accountNameToSelectAfterAuthentication release];
+                _accountNameToSelectAfterAuthentication = nil;
+            } else {
+                [[self window] makeFirstResponder:_searchField];
+            }
         } else {
             [self closeOrEndSheet];
         }
@@ -425,6 +469,9 @@ objectValueForTableColumn:(NSTableColumn *)aTableColumn
               row:(NSInteger)rowIndex {
     if (!sAuthenticated) {
         return;
+    }
+    if (rowIndex < 0 || rowIndex >= _accounts.count) {
+        ITCriticalError(NO, @"Row index %@ out of bounds [0, %@)", @(rowIndex), @(_accounts.count));
     }
     NSString *accountName = [self accountNameForRow:rowIndex];
     if (aTableColumn == _accountNameColumn) {

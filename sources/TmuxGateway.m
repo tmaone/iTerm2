@@ -63,12 +63,13 @@ static NSString *kCommandIsLastInList = @"lastInList";
 @synthesize delegate = delegate_;
 @synthesize acceptNotifications = acceptNotifications_;
 
-- (instancetype)initWithDelegate:(id<TmuxGatewayDelegate>)delegate {
+- (instancetype)initWithDelegate:(id<TmuxGatewayDelegate>)delegate dcsID:(NSString *)dcsID {
     self = [super init];
     if (self) {
         delegate_ = delegate;
         commandQueue_ = [[NSMutableArray alloc] init];
         strayMessages_ = [[NSMutableString alloc] init];
+        _dcsID = [dcsID copy];
     }
     return self;
 }
@@ -81,14 +82,14 @@ static NSString *kCommandIsLastInList = @"lastInList";
     [strayMessages_ release];
     [_minimumServerVersion release];
     [_maximumServerVersion release];
+    [_dcsID release];
 
     [super dealloc];
 }
 
-- (void)abortWithErrorMessage:(NSString *)message
-{
-    [self abortWithErrorMessage:[NSString stringWithFormat:@"Reason: %@", message]
-                          title:@"A tmux protocol error occurred."];
+- (void)abortWithErrorMessage:(NSString *)message {
+    [self abortWithErrorMessage:[NSString stringWithFormat:@"%@", message]
+                          title:@"tmux Reported a Problem"];
 }
 
 - (void)abortWithErrorMessage:(NSString *)message title:(NSString *)title {
@@ -99,7 +100,7 @@ static NSString *kCommandIsLastInList = @"lastInList";
     [alert addButtonWithTitle:@"OK"];
     [alert runModal];
     [self detach];
-    [delegate_ tmuxHostDisconnected];  // Force the client to quit
+    [delegate_ tmuxHostDisconnected:[[_dcsID copy] autorelease]];  // Force the client to quit
 }
 
 - (NSData *)decodeEscapedOutput:(const char *)bytes
@@ -260,7 +261,7 @@ error:
 
 - (void)hostDisconnected
 {
-    [delegate_ tmuxHostDisconnected];
+    [delegate_ tmuxHostDisconnected:[[_dcsID copy] autorelease]];
     [commandQueue_ removeAllObjects];
     disconnected_ = YES;
 }
@@ -312,7 +313,15 @@ error:
                              withObject:nil
                              withObject:obj];
             } else {
-                [self abortWithErrorMessage:[NSString stringWithFormat:@"Error: %@", currentCommand_]];
+                if ([currentCommandResponse_ hasPrefix:@"bad working directory:"] &&
+                    [currentCommand_[kCommandString] hasPrefix:@"new-window"] &&
+                    [currentCommand_[kCommandString] containsString:@"-c"] &&
+                    [self.maximumServerVersion compare:@2.1] != NSOrderedAscending) {
+                    [self abortWithErrorMessage:[NSString stringWithFormat:@"Error: %@.\n\nTmux 2.1 and earlier will refuse to create a new window pane with a nonexistant initial working directory.\n\nInfo:\n%@",
+                                                 currentCommandResponse_, currentCommand_]];
+                } else {
+                    [self abortWithErrorMessage:[NSString stringWithFormat:@"Error: %@.\n\nInfo:\n%@", currentCommandResponse_, currentCommand_]];
+                }
                 return;
             }
         } else {
@@ -470,6 +479,12 @@ error:
         if (acceptNotifications_) [self parseSessionsChangedCommand:command];
     } else if ([command hasPrefix:@"%noop"]) {
         TmuxLog(@"tmux noop: %@", command);
+    } else if ([command hasPrefix:@"%window-pane-changed"] ||  // active pane changed
+               [command hasPrefix:@"%session-window-changed"] ||  // active window changed
+               [command hasPrefix:@"%client-session-changed"] ||  // client is now attached to a new session
+               [command hasPrefix:@"%pane-mode-changed"]) {  // copy mode, etc
+        // New in tmux 2.5. Don't care.
+        TmuxLog(@"Ignore %@", command);
     } else if ([command hasPrefix:@"%exit "] ||
                [command isEqualToString:@"%exit"]) {
         TmuxLog(@"tmux exit message: %@", command);
@@ -497,7 +512,7 @@ error:
             [self hostDisconnected];
         } else {
             // We'll be tolerant of unrecognized commands.
-            NSLog(@"Unrecognized command \"%@\"", command);
+            DLog(@"Unrecognized command \"%@\"", command);
             [strayMessages_ appendFormat:@"%@\n", command];
         }
     }

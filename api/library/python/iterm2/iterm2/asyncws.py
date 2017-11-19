@@ -4,7 +4,7 @@
 from __future__ import print_function
 
 import argparse
-import dispatchq
+import _dispatchq as dispatchq
 import logging
 import os
 import select
@@ -131,7 +131,6 @@ class AsyncWebsocketApp(websocket.WebSocketApp):
               # propagate SystemExit further
               raise
       finally:
-          logging.debug("Everything has gone to shit")
           if thread and thread.isAlive():
               event.set()
               thread.join()

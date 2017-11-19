@@ -93,6 +93,33 @@
     }
 }
 
+- (id)maxWithComparator:(NSComparisonResult (^)(id, id))comparator {
+    id max = nil;
+    for (id object in self) {
+        if (max == nil || comparator(max, object) == NSOrderedAscending) {
+            max = object;
+        }
+    }
+    return max;
+}
+
+- (NSArray *)mininumsWithComparator:(NSComparisonResult (^)(id, id))comparator {
+    id min = nil;
+    for (id object in self) {
+        if (min == nil || comparator(min, object) == NSOrderedDescending) {
+            min = object;
+        }
+    }
+    NSMutableArray *result = [NSMutableArray array];
+    if (min) {
+        for (id object in self) {
+            if (comparator(object, min) == NSOrderedSame) {
+                [result addObject:object];
+            }
+        }
+    }
+    return result;
+}
 
 - (BOOL)anyWithBlock:(BOOL (^)(id anObject))block {
     for (id object in self) {

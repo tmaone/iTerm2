@@ -228,6 +228,8 @@ typedef NS_ENUM(NSInteger, BroadcastMode) {
 // Returns the tab associated with a session.
 - (PTYTab *)tabForSession:(PTYSession *)session;
 
+- (void)tabTitleDidChange:(PTYTab *)tab;
+
 #pragma mark - Sessions
 
 // Set the session name. If theSessionName is nil then set it to the pathname
@@ -384,7 +386,7 @@ typedef NS_ENUM(NSInteger, BroadcastMode) {
 // taken offscreen because there were no entries, this may cause it to return
 // to visibility. It won't return to visibility if
 // hideAutoCommandHistoryForSession was called.
-- (void)updateAutoCommandHistoryForPrefix:(NSString *)prefix inSession:(PTYSession *)session;
+- (void)updateAutoCommandHistoryForPrefix:(NSString *)prefix inSession:(PTYSession *)session popIfNeeded:(BOOL)popIfNeeded;
 
 // Show the ACH window. Follow up with a call to updateAutoCommandHistoryForPrefix.
 - (void)showAutoCommandHistoryForSession:(PTYSession *)session;

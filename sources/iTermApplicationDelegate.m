@@ -72,6 +72,7 @@
 #import "MovePaneController.h"
 #import "NSApplication+iTerm.h"
 #import "NSArray+iTerm.h"
+#import "NSBundle+iTerm.h"
 #import "NSFileManager+iTerm.h"
 #import "NSStringITerm.h"
 #import "NSWindow+iTerm.h"
@@ -85,6 +86,7 @@
 #import "PTYTextView.h"
 #import "PTYWindow.h"
 #import "QLPreviewPanel+iTerm.h"
+#import "TmuxDashboardController.h"
 #import "ToastWindowController.h"
 #import "VT100Terminal.h"
 
@@ -164,6 +166,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
     IBOutlet NSMenuItem *showFullScreenTabs;
     IBOutlet NSMenuItem *useTransparency;
     IBOutlet NSMenuItem *maximizePane;
+    IBOutlet SUUpdater * suUpdater;
     IBOutlet NSMenuItem *_showTipOfTheDay;  // Here because we must remove it for older OS versions.
     BOOL secureInputDesired_;
     BOOL quittingBecauseLastWindowClosed_;
@@ -311,7 +314,9 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
-    if ([menuItem action] == @selector(toggleUseBackgroundPatternIndicator:)) {
+    if ([menuItem action] == @selector(openDashboard:)) {
+        return [[iTermController sharedInstance] haveTmuxConnection];
+    } else if ([menuItem action] == @selector(toggleUseBackgroundPatternIndicator:)) {
       [menuItem setState:[self useBackgroundPatternIndicator]];
       return YES;
     } else if ([menuItem action] == @selector(undo:)) {
@@ -583,9 +588,9 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
             if (filename) {
                 NSString *initialText = bookmark[KEY_INITIAL_TEXT];
                 if (initialText && ![iTermAdvancedSettingsModel openFileOverridesSendText]) {
-                    initialText = [initialText stringByAppendingFormat:@"\n%@; exit\n", filename];
+                    initialText = [initialText stringByAppendingFormat:@"\n%@; exit", filename];
                 } else {
-                    initialText = [NSString stringWithFormat:@"%@; exit\n", filename];
+                    initialText = [NSString stringWithFormat:@"%@; exit", filename];
                 }
                 bookmark[KEY_INITIAL_TEXT] = initialText;
             }
@@ -736,6 +741,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
     DLog(@"applicationWillTerminate called");
     [[iTermModifierRemapper sharedInstance] setRemapModifiers:NO];
     DLog(@"applicationWillTerminate returning");
+    TurnOffDebugLoggingSilently();
 }
 
 - (BOOL)applicationOpenUntitledFile:(NSApplication *)theApplication {
@@ -1062,6 +1068,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 - (NSMenu *)statusBarMenu {
     NSMenu *menu = [[NSMenu alloc] init];
     NSMenuItem *item;
+
     item = [[[NSMenuItem alloc] initWithTitle:@"Preferences"
                                        action:@selector(showAndOrderFrontRegardlessPrefWindow:)
                                 keyEquivalent:@""] autorelease];
@@ -1069,6 +1076,11 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
     
     item = [[[NSMenuItem alloc] initWithTitle:@"Bring All Windows to Front"
                                        action:@selector(arrangeInFront:)
+                                keyEquivalent:@""] autorelease];
+    [menu addItem:item];
+
+    item = [[[NSMenuItem alloc] initWithTitle:@"Check For Updates"
+                                       action:@selector(checkForUpdatesFromMenu:)
                                 keyEquivalent:@""] autorelease];
     [menu addItem:item];
 
@@ -1251,9 +1263,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
     }
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kHaveAskedAboutBetaKey];
 
-    NSString *testingFeed = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"SUFeedURLForTesting"];
-    const BOOL nightlyChannel = [testingFeed containsString:@"nightly"];
-    if (nightlyChannel) {
+    if ([NSBundle it_isNightlyBuild]) {
         return;
     }
     
@@ -1262,7 +1272,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
         return;
     }
 
-    const BOOL isEarlyAdopter = [testingFeed containsString:@"testing3.xml"];
+    const BOOL isEarlyAdopter = [NSBundle it_isEarlyAdopter];
     if (isEarlyAdopter) {
         // Early adopters who are already beta testers won't get prompted.
         // They are the new "real" beta testers.
@@ -1475,6 +1485,10 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
     }
 }
 
+- (IBAction)checkForUpdatesFromMenu:(id)sender {
+    [suUpdater checkForUpdates:(sender)];
+}
+
 - (void)warnAboutChangeToDefaultPasteBehavior {
     static NSString *const kHaveWarnedAboutPasteConfirmationChange = @"NoSyncHaveWarnedAboutPasteConfirmationChange";
     if ([[NSUserDefaults standardUserDefaults] boolForKey:kHaveWarnedAboutPasteConfirmationChange]) {
@@ -1504,7 +1518,8 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 - (void)updateRestoreWindowArrangementsMenu:(NSMenuItem *)menuItem asTabs:(BOOL)asTabs {
     [WindowArrangements refreshRestoreArrangementsMenu:menuItem
                                           withSelector:asTabs ? @selector(restoreWindowArrangementAsTabs:) : @selector(restoreWindowArrangement:)
-                                       defaultShortcut:kRestoreDefaultWindowArrangementShortcut];
+                                       defaultShortcut:kRestoreDefaultWindowArrangementShortcut
+                                            identifier:asTabs ? @"Restore Window Arrangement as Tabs" : @"Restore Window Arrangement"];
 }
 
 - (NSMenu *)topLevelViewNamed:(NSString *)menuName {
@@ -1799,8 +1814,10 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
             switch (restorableSession.group) {
                 case kiTermRestorableSessionGroupSession:
                     // Restore a single session.
+                    DLog(@"Restore a single session");
                     term = [controller terminalWithGuid:restorableSession.terminalGuid];
                     if (term) {
+                        DLog(@"resuse an existing window");
                         // Reuse an existing window
                         tab = [term tabWithUniqueId:restorableSession.tabUniqueId];
                         if (tab) {
@@ -1815,6 +1832,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
                             [term addRevivedSession:restorableSession.sessions[0]];
                         }
                     } else {
+                        DLog(@"Create a new window");
                         // Create a new term and add the session to it.
                         term = [[[PseudoTerminal alloc] initWithSmartLayout:YES
                                                                  windowType:WINDOW_TYPE_NORMAL
@@ -1832,10 +1850,12 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 
                 case kiTermRestorableSessionGroupTab:
                     // Restore a tab, possibly with multiple sessions in split panes.
+                    DLog(@"Restore a tab, possibly with multiple sessions in split panes");
                     term = [controller terminalWithGuid:restorableSession.terminalGuid];
                     BOOL fitTermToTabs = NO;
                     if (!term) {
                         // Create a new window
+                        DLog(@"Create a new window");
                         term = [[[PseudoTerminal alloc] initWithSmartLayout:YES
                                                                  windowType:WINDOW_TYPE_NORMAL
                                                             savedWindowType:WINDOW_TYPE_NORMAL
@@ -1845,6 +1865,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
                         fitTermToTabs = YES;
                     }
                     // Add a tab to it.
+                    DLog(@"Add a tab to the window");
                     [term addTabWithArrangement:restorableSession.arrangement
                                        uniqueId:restorableSession.tabUniqueId
                                        sessions:restorableSession.sessions
@@ -1856,6 +1877,7 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 
                 case kiTermRestorableSessionGroupWindow:
                     // Restore a widow.
+                    DLog(@"Restore a widow");
                     term = [PseudoTerminal terminalWithArrangement:restorableSession.arrangement
                                                           sessions:restorableSession.sessions
                                           forceOpeningHotKeyWindow:YES];
@@ -2017,6 +2039,10 @@ static const NSTimeInterval kOneMonth = 30 * 24 * 60 * 60;
 
 - (IBAction)showTipOfTheDay:(id)sender {
     [[iTermTipController sharedInstance] showTip];
+}
+
+- (IBAction)openDashboard:(id)sender {
+    [[TmuxDashboardController sharedInstance] showWindow:nil];
 }
 
 #pragma mark - Private

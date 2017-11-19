@@ -19,6 +19,7 @@
 @interface NSObject (iTerm)
 
 + (BOOL)object:(NSObject *)a isEqualToObject:(NSObject *)b;
++ (instancetype)castFrom:(id)object;
 
 - (void)performSelectorOnMainThread:(SEL)selector withObjects:(NSArray *)objects;
 
@@ -45,7 +46,7 @@
 //   _delayedPerform.canceled = YES;
 //   _delayedPerform = nil;
 // }
-- (iTermDelayedPerform *)performBlock:(void (^)())block afterDelay:(NSTimeInterval)delay;
+- (iTermDelayedPerform *)performBlock:(void (^)(void))block afterDelay:(NSTimeInterval)delay;
 
 // Returns nil if this object is an instance of NSNull, otherwise returns self.
 - (instancetype)nilIfNull;

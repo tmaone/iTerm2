@@ -117,6 +117,8 @@ int decode_utf8_char(const unsigned char * restrict datap,
                       fromCharacterSet:(NSCharacterSet *)charSet
                   charsTakenFromPrefix:(int*)charsTakenFromPrefixPtr;
 
+- (NSArray *)componentsBySplittingStringWithQuotesAndBackslashEscaping:(NSDictionary *)escapes;
+
 // This handles a few kinds of URLs, after trimming whitespace from the beginning and end:
 // 1. Well formed strings like:
 //    "http://example.com/foo?query#fragment"
@@ -212,6 +214,10 @@ int decode_utf8_char(const unsigned char * restrict datap,
                                               NSString *complexString,
                                               BOOL *stop))block;
 
+// It is safe to modify, delete, or insert characters in `range` within `block`.
+- (void)reverseEnumerateSubstringsEqualTo:(NSString *)query
+                                    block:(void (^)(NSRange range))block;
+
 - (NSUInteger)iterm_unsignedIntegerValue;
 
 // Returns modified attributes for drawing self fitting size within one point.
@@ -253,6 +259,11 @@ int decode_utf8_char(const unsigned char * restrict datap,
 - (NSRange)makeRangeSafe:(NSRange)range;
 
 - (NSString *)stringByMakingControlCharactersToPrintable;
+
+// These methods work on 10.13 with strings that include newlines, and are consistent with each other.
+// The built in NSString API ignores everything from the first newline on for computing bounds.
+- (NSRect)it_boundingRectWithSize:(NSSize)bounds attributes:(NSDictionary *)attributes truncated:(BOOL *)truncated;
+- (void)it_drawInRect:(CGRect)rect attributes:(NSDictionary *)attributes;
 
 @end
 

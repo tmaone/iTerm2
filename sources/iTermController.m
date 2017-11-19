@@ -31,6 +31,7 @@
 #import "FutureMethods.h"
 #import "ITAddressBookMgr.h"
 #import "iTermAdvancedSettingsModel.h"
+#import "iTermBuriedSessions.h"
 #import "iTermHotKeyController.h"
 #import "NSArray+iTerm.h"
 #import "NSFileManager+iTerm.h"
@@ -189,6 +190,7 @@ static iTermController *gSharedInstance;
     [_restorableSessions release];
     [_currentRestorableSessionsStack release];
     [_fullScreenWindowManager release];
+    [_lastSelection release];
     [super dealloc];
 }
 
@@ -219,6 +221,11 @@ static iTermController *gSharedInstance;
             if ([session isTmuxClient] || [session isTmuxGateway]) {
                 return session;
             }
+        }
+    }
+    for (PTYSession *session in [[iTermBuriedSessions sharedInstance] buriedSessions]) {
+        if ([session isTmuxClient] || [session isTmuxGateway]) {
+            return session;
         }
     }
     return nil;
@@ -361,16 +368,24 @@ static iTermController *gSharedInstance;
     NSMutableArray *terminalArrangements = [NSMutableArray arrayWithCapacity:[_terminalWindows count]];
     if (allWindows) {
         for (PseudoTerminal *terminal in _terminalWindows) {
-            [terminalArrangements addObject:[terminal arrangement]];
+            NSDictionary *arrangement = [terminal arrangement];
+            if (arrangement) {
+                [terminalArrangements addObject:arrangement];
+            }
         }
     } else {
         PseudoTerminal *currentTerminal = [self currentTerminal];
         if (!currentTerminal) {
             return;
         }
-        [terminalArrangements addObject:[currentTerminal arrangement]];
+        NSDictionary *arrangement = [currentTerminal arrangement];
+        if (arrangement) {
+            [terminalArrangements addObject:arrangement];
+        }
     }
-    [WindowArrangements setArrangement:terminalArrangements withName:name];
+    if (terminalArrangements.count) {
+        [WindowArrangements setArrangement:terminalArrangements withName:name];
+    }
 }
 
 - (void)tryOpenArrangement:(NSDictionary *)terminalArrangement {
@@ -594,22 +609,6 @@ static iTermController *gSharedInstance;
     for (PseudoTerminal *t in _terminalWindows) {
         [[t window] orderFront:nil];
     }
-}
-
-- (PTYSession *)sessionWithMostRecentSelection {
-    NSTimeInterval latest = 0;
-    PTYSession *best = nil;
-    for (PseudoTerminal *term in [self terminals]) {
-        PTYTab *aTab = [term currentTab];
-        for (PTYSession *aSession in [aTab sessions]) {
-            NSTimeInterval current = [[aSession textview] selectionTime];
-            if (current > latest) {
-                latest = current;
-                best = aSession;
-            }
-        }
-    }
-    return best;
 }
 
 - (PseudoTerminal *)currentTerminal {
@@ -1327,7 +1326,9 @@ static iTermController *gSharedInstance;
     iTermRestorableSession *session = self.currentRestorableSession;
     assert(session);
     if (session) {
-        [_restorableSessions addObject:session];
+        if (session.sessions.count > 0) {
+            [_restorableSessions addObject:session];
+        }
         [_currentRestorableSessionsStack removeObjectAtIndex:0];
     }
 }
@@ -1457,6 +1458,36 @@ static iTermController *gSharedInstance;
     return [[self.terminals filteredArrayUsingBlock:^BOOL(PseudoTerminal *anObject) {
         return anObject.restorableStateDecodePending;
     }] count];
+}
+
+- (void)openSingleUseWindowWithCommand:(NSString *)command {
+    if ([command hasSuffix:@"&"] && command.length > 1) {
+        command = [command substringToIndex:command.length - 1];
+        system(command.UTF8String);
+        return;
+    }
+    NSString *escapedCommand = [command stringWithEscapedShellCharactersIncludingNewlines:YES];
+    command = [NSString stringWithFormat:@"sh -c \"%@\"", escapedCommand];
+    Profile *windowProfile = [self defaultBookmark];
+    if ([windowProfile[KEY_WINDOW_TYPE] integerValue] == WINDOW_TYPE_TRADITIONAL_FULL_SCREEN ||
+        [windowProfile[KEY_WINDOW_TYPE] integerValue] == WINDOW_TYPE_LION_FULL_SCREEN) {
+        windowProfile = [windowProfile dictionaryBySettingObject:@(WINDOW_TYPE_NORMAL) forKey:KEY_WINDOW_TYPE];
+    }
+    [self launchBookmark:windowProfile
+              inTerminal:nil
+                 withURL:nil
+        hotkeyWindowType:iTermHotkeyWindowTypeNone
+                 makeKey:YES
+             canActivate:YES
+                 command:command
+                   block:^PTYSession *(Profile *profile, PseudoTerminal *term) {
+                       profile = [profile dictionaryBySettingObject:@"" forKey:KEY_INITIAL_TEXT];
+                       profile = [profile dictionaryBySettingObject:@YES forKey:KEY_CLOSE_SESSIONS_ON_END];
+                       term.window.collectionBehavior = NSWindowCollectionBehaviorFullScreenNone;
+                       PTYSession *session = [term createTabWithProfile:profile withCommand:command];
+                       session.isSingleUseSession = YES;
+                       return session;
+                   }];
 }
 
 @end
